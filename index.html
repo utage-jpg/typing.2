@@ -1861,7 +1861,7 @@ html,body{
   }
 
   /* --------------------------
-     PNG download with offscreen DOM and html-to-image
+     PNG download with custom layout
      -------------------------- */
   function downloadResultPng(){
     var saveBtn = document.getElementById("btnSaveImage");
@@ -1878,18 +1878,37 @@ html,body{
     var exportSquare = null;
 
     try{
-      // Get the result elements to capture
-      var screenResult = document.getElementById('screenResult');
-      if (!screenResult) {
-        throw new Error('結果画面が見つかりません');
-      }
-
-      var resultHero = screenResult.querySelector('.resultHero');
-      var resCards = screenResult.querySelector('#resCards');
-      var graphQbox = screenResult.querySelector('.qbox'); // The qbox containing both graphs
+      // Get top3 from state.posterior for image generation
+      var topRaw = topN(state.posterior, 3);
+      while(topRaw.length < 3) topRaw.push(["—", 0]);
       
-      if (!resultHero || !resCards || !graphQbox) {
-        throw new Error('必要な要素が見つかりません');
+      // For display we use sharpened posterior (same as showResult)
+      var kFinal = getSharpenK(state.step);
+      var displayP = sharpenPosterior(state.posterior, kFinal);
+      var displayForTop = topRaw.map(entry => [entry[0], displayP[entry[0]] || 0]);
+      var displayPcts = adjustDisplayPercentages(displayForTop);
+      
+      var top3 = topRaw.map((entry, i) => {
+        var t = entry[0];
+        return {type: t, displayPct: displayPcts[i]};
+      });
+
+      var top1 = top3[0].type;
+      var top2 = top3[1].type;
+      var top3Type = top3[2].type;
+      
+      // Get summary for top1
+      var top1Summary = typeSummary(top1);
+      var top1Quadra = getQuadra(top1);
+      var top2Quadra = getQuadra(top2);
+      var top3Quadra = getQuadra(top3Type);
+
+      // Get graph elements
+      var elementViz = document.querySelector('#elementViz');
+      var quadraViz = document.querySelector('#quadraViz');
+      
+      if (!elementViz || !quadraViz) {
+        throw new Error('グラフ要素が見つかりません');
       }
 
       // Create offscreen export container
@@ -1908,7 +1927,7 @@ html,body{
         flex-direction: column;
         overflow: hidden;
         box-sizing: border-box;
-        padding: 40px;
+        padding: 48px;
         gap: 24px;
       `;
 
@@ -1929,53 +1948,192 @@ html,body{
       `;
       exportSquare.appendChild(style);
 
-      // Clone and prepare hero section (minimal header)
-      var heroClone = resultHero.cloneNode(true);
-      heroClone.style.cssText = `
+      // (A) Header section - 260px height
+      var headerSection = document.createElement('div');
+      headerSection.style.cssText = `
+        display: flex;
+        gap: 24px;
+        height: 260px;
+        flex-shrink: 0;
+      `;
+
+      // Left: Top1 type card (58%)
+      var top1Card = document.createElement('div');
+      top1Card.style.cssText = `
+        flex: 0 0 58%;
         background: var(--bg-medium);
         border: 2px solid var(--border-dark);
-        border-radius: 20px;
-        padding: 30px;
+        border-radius: 28px;
+        padding: 32px;
         box-shadow: 0 8px 32px rgba(0,0,0,0.3);
-        flex-shrink: 0;
-        height: 200px;
-        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        text-align: center;
+        position: relative;
       `;
-      // Remove buttons from hero
-      var buttons = heroClone.querySelectorAll('button');
-      buttons.forEach(btn => btn.remove());
-
-      // Clone and prepare cards section
-      var cardsClone = resCards.cloneNode(true);
-      cardsClone.style.cssText = `
-        flex-shrink: 0;
-        height: 480px;
-        overflow: hidden;
-        transform: scale(0.85);
-        transform-origin: top left;
+      
+      top1Card.innerHTML = `
+        <div style="position: absolute; top: 16px; left: 16px;">
+          <span style="background: var(--q-${top1Quadra}); color: white; padding: 4px 12px; border-radius: 12px; font-size: 14px; font-weight: 700;">1位</span>
+        </div>
+        <div style="font-size: 72px; font-weight: 900; color: var(--q-${top1Quadra}); margin: 16px 0;">${top1}</div>
+        <div style="font-size: 18px; color: var(--text-secondary);">あなたの推定タイプ</div>
       `;
 
-      // Clone and prepare graphs section
-      var graphsClone = graphQbox.cloneNode(true);
-      graphsClone.style.cssText = `
+      // Right: Description + Top2/3 (42%)
+      var rightSection = document.createElement('div');
+      rightSection.style.cssText = `
+        flex: 0 0 42%;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      `;
+
+      // Description
+      var description = document.createElement('div');
+      description.style.cssText = `
         background: var(--bg-medium);
         border: 1px solid var(--border-dark);
-        border-radius: 12px;
-        padding: 20px;
+        border-radius: 20px;
+        padding: 24px;
+        flex: 1;
+        display: flex;
+        align-items: center;
+      `;
+      description.innerHTML = `
+        <div style="font-size: 18px; line-height: 1.6; color: var(--text-primary);">${top1Summary.oneLine}</div>
+      `;
+
+      // Top2/3 mini cards
+      var miniCards = document.createElement('div');
+      miniCards.style.cssText = `
+        display: flex;
+        gap: 12px;
+        height: 80px;
+      `;
+
+      // Top2 mini card
+      var top2Card = document.createElement('div');
+      top2Card.style.cssText = `
+        flex: 1;
+        background: var(--bg-medium);
+        border: 1px solid var(--border-dark);
+        border-radius: 16px;
+        padding: 16px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        text-align: center;
+      `;
+      top2Card.innerHTML = `
+        <div style="font-size: 14px; color: var(--text-secondary); margin-bottom: 4px;">2位</div>
+        <div style="font-size: 24px; font-weight: 700; color: var(--q-${top2Quadra});">${top2}</div>
+      `;
+
+      // Top3 mini card
+      var top3Card = document.createElement('div');
+      top3Card.style.cssText = `
+        flex: 1;
+        background: var(--bg-medium);
+        border: 1px solid var(--border-dark);
+        border-radius: 16px;
+        padding: 16px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        text-align: center;
+      `;
+      top3Card.innerHTML = `
+        <div style="font-size: 14px; color: var(--text-secondary); margin-bottom: 4px;">3位</div>
+        <div style="font-size: 24px; font-weight: 700; color: var(--q-${top3Quadra});">${top3Type}</div>
+      `;
+
+      miniCards.appendChild(top2Card);
+      miniCards.appendChild(top3Card);
+      rightSection.appendChild(description);
+      rightSection.appendChild(miniCards);
+
+      headerSection.appendChild(top1Card);
+      headerSection.appendChild(rightSection);
+
+      // (B) Element visualization - 360px height
+      var elementSection = document.createElement('div');
+      elementSection.style.cssText = `
+        background: var(--bg-medium);
+        border: 1px solid var(--border-dark);
+        border-radius: 20px;
+        padding: 24px;
+        height: 360px;
         flex-shrink: 0;
+        overflow: hidden;
+      `;
+      elementSection.innerHTML = `
+        <div style="font-size: 20px; font-weight: 700; margin-bottom: 16px;">情報要素（価値寄り度）</div>
+        <div id="exportElementViz"></div>
+      `;
+
+      // Clone and prepare element viz
+      var elementVizClone = elementViz.cloneNode(true);
+      elementVizClone.id = 'exportElementViz';
+      elementVizClone.style.cssText = `
         height: 280px;
         overflow: hidden;
-        transform: scale(0.9);
-        transform-origin: top left;
       `;
-      // Remove feedback section if present
-      var feedbackSection = graphsClone.querySelector('#feedbackBox');
-      if (feedbackSection) feedbackSection.remove();
+      
+      // Fix bar widths immediately
+      var elementBars = elementVizClone.querySelectorAll('div[data-w]');
+      elementBars.forEach(bar => {
+        var targetWidth = bar.getAttribute('data-w');
+        if (targetWidth) {
+          bar.style.width = targetWidth + '%';
+        }
+      });
+
+      // (C) Quadra visualization - 320px height
+      var quadraSection = document.createElement('div');
+      quadraSection.style.cssText = `
+        background: var(--bg-medium);
+        border: 1px solid var(--border-dark);
+        border-radius: 20px;
+        padding: 24px;
+        height: 320px;
+        flex-shrink: 0;
+        overflow: hidden;
+      `;
+      quadraSection.innerHTML = `
+        <div style="font-size: 20px; font-weight: 700; margin-bottom: 16px;">クアドラ割合（推定）</div>
+        <div id="exportQuadraViz"></div>
+      `;
+
+      // Clone and prepare quadra viz
+      var quadraVizClone = quadraViz.cloneNode(true);
+      quadraVizClone.id = 'exportQuadraViz';
+      quadraVizClone.style.cssText = `
+        height: 240px;
+        overflow: hidden;
+      `;
+      
+      // Fix bar widths immediately
+      var quadraBars = quadraVizClone.querySelectorAll('.vizBar i[data-w]');
+      quadraBars.forEach(bar => {
+        var targetWidth = bar.getAttribute('data-w');
+        if (targetWidth) {
+          bar.style.width = targetWidth + '%';
+        }
+      });
+
+      // Replace placeholder divs with actual clones
+      elementSection.replaceChild(elementVizClone, elementSection.querySelector('#exportElementViz'));
+      quadraSection.replaceChild(quadraVizClone, quadraSection.querySelector('#exportQuadraViz'));
 
       // Assemble the export container
-      exportSquare.appendChild(heroClone);
-      exportSquare.appendChild(cardsClone);
-      exportSquare.appendChild(graphsClone);
+      exportSquare.appendChild(headerSection);
+      exportSquare.appendChild(elementSection);
+      exportSquare.appendChild(quadraSection);
 
       // Add to DOM (offscreen)
       document.body.appendChild(exportSquare);
