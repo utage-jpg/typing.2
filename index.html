@@ -751,7 +751,7 @@ html,body{
                 <p class="resultSubline">あなたの推定タイプ</p>
               </div>
               <div style="text-align:right">
-                <button id="btnSaveImage" class="btn primary" style="min-height:48px;padding:12px 20px;font-size:14px;font-weight:1200;">
+                <button id="btnSaveImage" type="button" class="btn primary" style="min-height:48px;padding:12px 20px;font-size:14px;font-weight:1200;">
                   結果画像を保存（PNG）
                 </button>
               </div>
@@ -829,10 +829,12 @@ html,body{
   </div>
 </div>
 
+<!-- html-to-image library for reliable PNG generation -->
+<script src="https://cdn.jsdelivr.net/npm/html-to-image@1.11.11/dist/html-to-image.min.js"></script>
+
 <script>
 (() => {
   "use strict";
-
   /* --------------------------
      Core constants / models
      -------------------------- */
@@ -1843,20 +1845,12 @@ html,body{
 
       var topType = "ILE";
       if (top3 && top3.length > 0 && top3[0] && top3[0].type) {
-        topType = top3[0].type;
-      } else {
         var t1 = topN(state.posterior, 1);
         if (t1 && t1.length > 0 && t1[0] && t1[0][0]) topType = t1[0][0];
       }
       renderViz(topType);
       showFeedback(topType);
       updateSide();
-
-      // Setup save button
-      const saveBtn = document.getElementById("btnSaveImage");
-      if (saveBtn) {
-        saveBtn.addEventListener("click", downloadResultPng);
-      }
 
     }catch(e){
       const be = document.getElementById("bootError");
@@ -1867,12 +1861,12 @@ html,body{
   }
 
   /* --------------------------
-     PNG download with SVG foreignObject
+     PNG download with html-to-image library
      -------------------------- */
   function downloadResultPng(){
     var saveBtn = document.getElementById("btnSaveImage");
     if (!saveBtn) {
-      console.error('Save button not found');
+      alert('保存ボタンが見つかりません');
       return;
     }
 
@@ -1882,127 +1876,73 @@ html,body{
     saveBtn.textContent = "生成中...";
 
     try{
-      // Get the result elements to capture within screenResult
-      var screen = document.getElementById('screenResult');
-      if (!screen) {
-        throw new Error('Result screen not found');
-      }
-      
-      var resultHero = screen.querySelector('.resultHero');
-      var resCards = screen.querySelector('#resCards');
-      var elementViz = screen.querySelector('#elementViz');
-      var quadraViz = screen.querySelector('#quadraViz');
-      
-      if (!resultHero || !resCards || !elementViz || !quadraViz) {
-        throw new Error('Required elements not found');
+      // Get the result screen element
+      var screenResult = document.getElementById('screenResult');
+      if (!screenResult) {
+        throw new Error('結果画面が見つかりません');
       }
 
-      // Create a container for the content
-      var container = document.createElement('div');
-      container.style.cssText = 'width:1080px;height:1080px;background:var(--bg-dark);color:var(--text-primary);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Hiragino Sans","Noto Sans JP",sans-serif;padding:40px;box-sizing:border-box;display:flex;flex-direction:column;gap:30px;';
-
-      // Clone and prepare the hero section
-      var heroClone = resultHero.cloneNode(true);
-      heroClone.style.cssText = 'background:var(--bg-medium);border:2px solid var(--border-dark);border-radius:20px;padding:30px;box-shadow:0 8px 32px rgba(0,0,0,0.3);';
-
-      // Clone and prepare the cards section
-      var cardsClone = resCards.cloneNode(true);
-      cardsClone.style.cssText = 'display:grid;gap:20px;';
-
-      // Clone and prepare visualizations
-      var vizContainer = document.createElement('div');
-      vizContainer.style.cssText = 'display:grid;gap:20px;';
-      
-      var elementVizClone = elementViz.cloneNode(true);
-      elementVizClone.style.cssText = 'background:var(--bg-medium);border:1px solid var(--border-dark);border-radius:12px;padding:20px;';
-      
-      var quadraVizClone = quadraViz.cloneNode(true);
-      quadraVizClone.style.cssText = 'background:var(--bg-medium);border:1px solid var(--border-dark);border-radius:12px;padding:20px;';
-
-      vizContainer.appendChild(elementVizClone);
-      vizContainer.appendChild(quadraVizClone);
-
-      // Assemble the content
-      container.appendChild(heroClone);
-      container.appendChild(cardsClone);
-      container.appendChild(vizContainer);
-
-      // Create SVG with foreignObject
-      var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-      svg.setAttribute('width', '1080');
-      svg.setAttribute('height', '1080');
-      svg.setAttribute('viewBox', '0 0 1080 1080');
-
-      var foreignObject = document.createElementNS('http://www.w3.org/2000/svg', 'foreignObject');
-      foreignObject.setAttribute('width', '1080');
-      foreignObject.setAttribute('height', '1080');
-      foreignObject.setAttribute('x', '0');
-      foreignObject.setAttribute('y', '0');
-
-      foreignObject.appendChild(container);
-      svg.appendChild(foreignObject);
-
-      // Convert to blob and download
-      var svgString = new XMLSerializer().serializeToString(svg);
-      var blob = new Blob([svgString], {type: 'image/svg+xml'});
-      
-      var img = new Image();
-      img.onload = function() {
-        var canvas = document.createElement('canvas');
-        canvas.width = 1080;
-        canvas.height = 1080;
-        var ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0);
-        
-        canvas.toBlob(function(pngBlob) {
-          if (pngBlob) {
-            // Use blob for download
-            var url = URL.createObjectURL(pngBlob);
-            downloadFile(url, 'png');
-          } else {
-            // Fallback to dataURL
-            var dataUrl = canvas.toDataURL('image/png');
-            downloadFile(dataUrl, 'dataurl');
+      // Use html-to-image to generate PNG
+      htmlToImage.toPng(screenResult, {
+        width: 1080,
+        height: 1080,
+        style: {
+          transform: 'scale(2)',
+          transformOrigin: 'top left',
+          width: '540px',
+          height: 'auto'
+        },
+        pixelRatio: 2,
+        backgroundColor: '#0b1020',
+        filter: (node) => {
+          // Exclude hidden elements and certain UI elements
+          if (node.nodeType === Node.ELEMENT_NODE) {
+            const element = node;
+            if (element.classList && (
+              element.classList.contains('hidden') ||
+              element.id === 'btnToggleFeedback' ||
+              element.id === 'btnRestart'
+            )) {
+              return false;
+            }
           }
-        }, 'image/png');
-      };
-      
-      img.onerror = function() {
-        console.error('Failed to load SVG for conversion');
-        // Fallback: try direct SVG download
-        var url = URL.createObjectURL(blob);
-        downloadFile(url, 'svg');
-      };
-
-      function downloadFile(url, type) {
+          return true;
+        }
+      })
+      .then(function(dataUrl) {
+        // Create download link
         var a = document.createElement('a');
         var padFn = function(n) { return String(n).padStart(2, '0'); };
         var dt = new Date();
         var filename = 'socionics_result_' + dt.getFullYear() + padFn(dt.getMonth()+1) + padFn(dt.getDate()) + '_' + padFn(dt.getHours()) + padFn(dt.getMinutes()) + padFn(dt.getSeconds()) + '.png';
         
-        if (type === 'svg') {
-          filename = filename.replace('.png', '.svg');
-        }
-        
-        a.href = url;
+        a.href = dataUrl;
         a.download = filename;
+        a.style.display = 'none';
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+        
+        // Restore button after a short delay
+        setTimeout(function() {
+          saveBtn.disabled = false;
+          saveBtn.textContent = originalText;
+        }, 1000);
+      })
+      .catch(function(error) {
+        console.error('Error generating PNG:', error);
+        alert('画像の生成に失敗しました: ' + error.message);
         
         // Restore button
         saveBtn.disabled = false;
         saveBtn.textContent = originalText;
-      }
+      });
+
+    } catch(e) {
+      console.error('Error in downloadResultPng:', e);
+      alert('画像保存処理でエラーが発生しました: ' + e.message);
       
-      img.src = URL.createObjectURL(blob);
-      
-    } catch(e){
-      console.error('Error generating PNG:', e);
-      alert('画像の生成に失敗しました: ' + e.message);
-    } finally {
-      // Always restore button state
+      // Restore button
       saveBtn.disabled = false;
       saveBtn.textContent = originalText;
     }
@@ -2083,6 +2023,14 @@ html,body{
   function boot(){
     state.posterior = Object.fromEntries(TYPES.map(t=>[t,1/TYPES.length]));
     state.quadra = computeQuadraFromPosterior(state.posterior);
+    
+    // Setup save button event listener (once)
+    var saveBtn = document.getElementById("btnSaveImage");
+    if (saveBtn && !saveBtn.dataset.listenerAdded) {
+      saveBtn.addEventListener("click", downloadResultPng);
+      saveBtn.dataset.listenerAdded = "true";
+    }
+    
     renderQuestion();
   }
 
