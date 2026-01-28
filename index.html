@@ -752,7 +752,7 @@ html,body{
               </div>
               <div style="text-align:right">
                 <button id="btnSaveImage" type="button" class="btn primary" style="min-height:48px;padding:12px 20px;font-size:14px;font-weight:1200;">
-                  結果画像を保存（PNG）
+                  結果画像を保存
                 </button>
               </div>
             </div>
@@ -1861,7 +1861,7 @@ html,body{
   }
 
   /* --------------------------
-     PNG download with html-to-image library
+     PNG download with offscreen DOM and html-to-image
      -------------------------- */
   function downloadResultPng(){
     var saveBtn = document.getElementById("btnSaveImage");
@@ -1875,72 +1875,197 @@ html,body{
     saveBtn.disabled = true;
     saveBtn.textContent = "生成中...";
 
+    var exportSquare = null;
+
     try{
-      // Get the result screen element
+      // Get the result elements to capture
       var screenResult = document.getElementById('screenResult');
       if (!screenResult) {
         throw new Error('結果画面が見つかりません');
       }
 
-      // Use html-to-image to generate PNG
-      htmlToImage.toPng(screenResult, {
+      var resultHero = screenResult.querySelector('.resultHero');
+      var resCards = screenResult.querySelector('#resCards');
+      var elementViz = screenResult.querySelector('#elementViz');
+      var quadraViz = screenResult.querySelector('#quadraViz');
+      
+      if (!resultHero || !resCards || !elementViz || !quadraViz) {
+        throw new Error('必要な要素が見つかりません');
+      }
+
+      // Create offscreen export container
+      exportSquare = document.createElement('div');
+      exportSquare.id = 'exportSquare';
+      exportSquare.style.cssText = `
+        position: fixed;
+        left: -99999px;
+        top: 0;
+        width: 1080px;
+        height: 1080px;
+        background: #0b1020;
+        color: var(--text-primary);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Sans", "Noto Sans JP", sans-serif;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        box-sizing: border-box;
+        padding: 40px;
+        gap: 30px;
+      `;
+
+      // Clone and prepare hero section
+      var heroClone = resultHero.cloneNode(true);
+      heroClone.style.cssText = `
+        background: var(--bg-medium);
+        border: 2px solid var(--border-dark);
+        border-radius: 20px;
+        padding: 30px;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+        flex-shrink: 0;
+        height: 280px;
+        overflow: hidden;
+      `;
+
+      // Clone and prepare cards section
+      var cardsClone = resCards.cloneNode(true);
+      cardsClone.style.cssText = `
+        flex-shrink: 0;
+        height: 400px;
+        overflow: hidden;
+        transform: scale(0.9);
+        transform-origin: top left;
+      `;
+
+      // Clone and prepare visualizations container
+      var vizContainer = document.createElement('div');
+      vizContainer.style.cssText = `
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+        flex-shrink: 0;
+        height: 290px;
+        overflow: hidden;
+        transform: scale(0.85);
+        transform-origin: top left;
+      `;
+      
+      var elementVizClone = elementViz.cloneNode(true);
+      elementVizClone.style.cssText = `
+        background: var(--bg-medium);
+        border: 1px solid var(--border-dark);
+        border-radius: 12px;
+        padding: 20px;
+        height: 135px;
+        overflow: hidden;
+      `;
+      
+      var quadraVizClone = quadraViz.cloneNode(true);
+      quadraVizClone.style.cssText = `
+        background: var(--bg-medium);
+        border: 1px solid var(--border-dark);
+        border-radius: 12px;
+        padding: 20px;
+        height: 135px;
+        overflow: hidden;
+      `;
+
+      vizContainer.appendChild(elementVizClone);
+      vizContainer.appendChild(quadraVizClone);
+
+      // Assemble the export container
+      exportSquare.appendChild(heroClone);
+      exportSquare.appendChild(cardsClone);
+      exportSquare.appendChild(vizContainer);
+
+      // Add to DOM (offscreen)
+      document.body.appendChild(exportSquare);
+
+      // Generate image using html-to-image
+      htmlToImage.toBlob(exportSquare, {
         width: 1080,
         height: 1080,
-        style: {
-          transform: 'scale(2)',
-          transformOrigin: 'top left',
-          width: '540px',
-          height: 'auto'
-        },
         pixelRatio: 2,
         backgroundColor: '#0b1020',
         filter: (node) => {
-          // Exclude hidden elements and certain UI elements
+          // Exclude hidden elements
           if (node.nodeType === Node.ELEMENT_NODE) {
             const element = node;
-            if (element.classList && (
-              element.classList.contains('hidden') ||
-              element.id === 'btnToggleFeedback' ||
-              element.id === 'btnRestart'
-            )) {
+            if (element.classList && element.classList.contains('hidden')) {
               return false;
             }
           }
           return true;
         }
       })
-      .then(function(dataUrl) {
-        // Create download link
-        var a = document.createElement('a');
-        var padFn = function(n) { return String(n).padStart(2, '0'); };
-        var dt = new Date();
-        var filename = 'socionics_result_' + dt.getFullYear() + padFn(dt.getMonth()+1) + padFn(dt.getDate()) + '_' + padFn(dt.getHours()) + padFn(dt.getMinutes()) + padFn(dt.getSeconds()) + '.png';
-        
-        a.href = dataUrl;
-        a.download = filename;
-        a.style.display = 'none';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        
-        // Restore button after a short delay
-        setTimeout(function() {
-          saveBtn.disabled = false;
-          saveBtn.textContent = originalText;
-        }, 1000);
+      .then(function(blob) {
+        if (!blob) {
+          throw new Error('画像の生成に失敗しました');
+        }
+
+        // Create file from blob
+        var file = new File([blob], 'socionics_result.png', { type: 'image/png' });
+
+        // Try to use navigator.share for mobile/iOS
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          navigator.share({
+            files: [file],
+            title: 'Socionics Result',
+            text: 'ソシオニクス診断結果'
+          })
+          .then(function() {
+            console.log('Shared successfully');
+          })
+          .catch(function(error) {
+            console.log('Share cancelled or failed:', error);
+            // Fallback to download
+            downloadBlob(blob);
+          })
+          .finally(function() {
+            cleanupAndRestore();
+          });
+        } else {
+          // Fallback to traditional download for PC
+          downloadBlob(blob);
+          cleanupAndRestore();
+        }
       })
       .catch(function(error) {
         console.error('Error generating PNG:', error);
         alert('画像の生成に失敗しました: ' + error.message);
-        
-        // Restore button
-        saveBtn.disabled = false;
-        saveBtn.textContent = originalText;
+        cleanupAndRestore();
       });
 
     } catch(e) {
       console.error('Error in downloadResultPng:', e);
       alert('画像保存処理でエラーが発生しました: ' + e.message);
+      cleanupAndRestore();
+    }
+
+    function downloadBlob(blob) {
+      var a = document.createElement('a');
+      var padFn = function(n) { return String(n).padStart(2, '0'); };
+      var dt = new Date();
+      var filename = 'socionics_result_' + dt.getFullYear() + padFn(dt.getMonth()+1) + padFn(dt.getDate()) + '_' + padFn(dt.getHours()) + padFn(dt.getMinutes()) + padFn(dt.getSeconds()) + '.png';
+      
+      var url = URL.createObjectURL(blob);
+      a.href = url;
+      a.download = filename;
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      
+      // Delay URL revocation to ensure download starts
+      setTimeout(function() {
+        URL.revokeObjectURL(url);
+      }, 3000);
+    }
+
+    function cleanupAndRestore() {
+      // Clean up offscreen DOM
+      if (exportSquare && exportSquare.parentNode) {
+        exportSquare.parentNode.removeChild(exportSquare);
+      }
       
       // Restore button
       saveBtn.disabled = false;
