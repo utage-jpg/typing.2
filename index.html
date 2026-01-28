@@ -1930,7 +1930,7 @@ html,body{
         padding: 48px;
         gap: 24px;
       `;
-
+      
       // Add style to disable animations and transitions
       var style = document.createElement('style');
       style.textContent = `
@@ -1938,12 +1938,6 @@ html,body{
           animation: none !important;
           transition: none !important;
           transform: none !important;
-        }
-        #exportSquare .vizBar i, #exportSquare .vizBar div[data-w] {
-          width: 100% !important;
-        }
-        #exportSquare .percentageBar__fill {
-          width: 100% !important;
         }
       `;
       exportSquare.appendChild(style);
