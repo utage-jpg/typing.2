@@ -556,54 +556,104 @@ const contentTitle = document.getElementById("contentTitle");
 const contentTag = document.getElementById("contentTag");
 const contentText = document.getElementById("contentText");
 
+function getQuery(){
+  const sp = new URLSearchParams(location.search);
+  const type = (sp.get("type") || "").toUpperCase();
+  const expand = sp.get("expand") === "1" || sp.get("all") === "1";
+  return {type, expand};
+}
+
+function selectType(type){
+  const btn = Array.from(typeButtons).find(b=>b.getAttribute("data-type")===type);
+  if(!btn) return false;
+
+  currentType = type;
+  currentFunc = null;
+
+  typeButtons.forEach(b=>b.classList.remove("active"));
+  btn.classList.add("active");
+
+  selectedTypeTitle.textContent = `${type} の機能構成`;
+  functionPanel.style.display = "block";
+
+  funcButtons.forEach(fb=>fb.classList.remove("active"));
+  contentPanel.style.display = "none";
+  return true;
+}
+
+function getFuncContent(type, funcKey){
+  const elements = MODEL[type];
+  if(!elements) return null;
+
+  const index = FUNC_KEYS.indexOf(funcKey);
+  const elem = elements[index];
+
+  const textsOfFunc = TEXTS[funcKey] || {};
+  const body = textsOfFunc[elem] || defaultText(type, funcKey, elem);
+
+  return { elem, body };
+}
+
+function showSingleFunction(funcKey){
+  if(!currentType) return;
+
+  currentFunc = funcKey;
+  funcButtons.forEach(b => b.classList.remove("active"));
+  const btn = [...funcButtons].find(b => b.getAttribute("data-func") === funcKey);
+  if(btn) btn.classList.add("active");
+
+  const c = getFuncContent(currentType, funcKey);
+  if(!c) return;
+
+  contentTitle.textContent = `${currentType} の ${FUNC_LABEL_JP[funcKey]}（${c.elem}）`;
+  contentTag.textContent = `Type: ${currentType} / Function: ${funcKey} / Element: ${c.elem}`;
+  contentText.textContent = c.body;
+
+  contentPanel.style.display = "block";
+}
+
+function renderAllFunctions(type){
+  // 8機能まとめて1画面に出す
+  const elements = MODEL[type];
+  if(!elements) return;
+
+  // 機能ボタンのactiveは全部外しておく（一覧なので）
+  funcButtons.forEach(b => b.classList.remove("active"));
+
+  const blocks = FUNC_KEYS.map((funcKey, i) => {
+    const elem = elements[i];
+    const textsOfFunc = TEXTS[funcKey] || {};
+    const body = textsOfFunc[elem] || defaultText(type, funcKey, elem);
+
+    return `
+      <div class="allBlock" style="margin: 14px 0; padding: 12px; border: 1px solid #2a2d36; border-radius: 10px; background: rgba(255,255,255,0.04);">
+        <div style="font-weight:700; margin-bottom:6px;">
+          ${FUNC_LABEL_JP[funcKey]}（${elem}）
+        </div>
+        <div style="white-space:pre-wrap; color:#e9edff; line-height:1.65;">
+          ${String(body).replace(/[&<>"]/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[s]))}
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  contentTitle.textContent = `${type} の8機能（まとめ）`;
+  contentTag.textContent = `Type: ${type} / expand=1`;
+  contentText.innerHTML = blocks;
+  contentPanel.style.display = "block";
+}
+
 typeButtons.forEach(btn => {
     btn.addEventListener("click", () => {
         const type = btn.getAttribute("data-type");
-        currentType = type;
-        currentFunc = null;
-
-        // タイプボタンの選択状態を更新
-        typeButtons.forEach(b => b.classList.remove("active"));
-        btn.classList.add("active");
-
-        // 機能パネル表示
-        selectedTypeTitle.textContent = `${type} の機能構成`;
-        functionPanel.style.display = "block";
-
-        // 機能ボタンの選択解除
-        funcButtons.forEach(fb => fb.classList.remove("active"));
-
-        // コンテンツは一旦非表示
-        contentPanel.style.display = "none";
+        selectType(type);
     });
 });
 
 funcButtons.forEach(btn => {
     btn.addEventListener("click", () => {
-        if (!currentType) return;
         const funcKey = btn.getAttribute("data-func");
-        currentFunc = funcKey;
-
-        // 機能ボタンの選択状態更新
-        funcButtons.forEach(b => b.classList.remove("active"));
-        btn.classList.add("active");
-
-        // モデルから情報要素を取得
-        const elements = MODEL[currentType];
-        if (!elements) return;
-        const index = FUNC_KEYS.indexOf(funcKey);
-        const elem = elements[index]; // Ne, Ti など
-
-        const textsOfFunc = TEXTS[funcKey] || {};
-        const body = textsOfFunc[elem] || defaultText(currentType, funcKey, elem);
-
-        // タイトル表示
-        contentTitle.textContent = `${currentType} の ${FUNC_LABEL_JP[funcKey]}（${elem}）`;
-        contentTag.textContent = `Type: ${currentType} / Function: ${funcKey} / Element: ${elem}`;
-        contentText.textContent = body;
-
-        contentPanel.style.display = "block";
-        // ページ全体をスクロールするだけなので、ここで高さ調整は不要
+        showSingleFunction(funcKey);
     });
 });
 
@@ -658,11 +708,17 @@ function renderAll(type){
   });
 }
 
-(function boot(){
-  const type = getParam("type");
-  const view = getParam("view");
-  if(type && view === "all"){
-    renderAll(type);
+(function initFromQuery(){
+  const params = new URLSearchParams(location.search);
+  const qType = params.get("type");
+  const expand = params.get("expand");
+
+  if(qType && MODEL[qType]){
+    selectType(qType);
+
+    if(expand === "1"){
+      renderAllFunctions(qType);
+    }
   }
 })();
 
