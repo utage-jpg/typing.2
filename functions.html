@@ -219,8 +219,8 @@ h3 {
     border: 1px solid #2a2d36;
     box-shadow: 0 0 20px rgba(70, 120, 255, 0.15);
     font-size: 15px;
-    white-space: pre-wrap;
-    line-height: 1.8;
+    white-space: normal;
+    line-height: 1.65;
 }
 
 #contentTitle {
@@ -235,6 +235,69 @@ h3 {
     color: #8a92ad;
     margin-bottom: 10px;
 }
+
+/* Summary Panel Styles */
+#summaryPanel { 
+    margin: 14px 0 18px; 
+}
+
+.summaryHero {
+    border-radius: 14px;
+    padding: 16px 16px 14px;
+    background: linear-gradient(180deg, rgba(70,120,255,0.18), rgba(21,23,28,0.92));
+    border: 1px solid rgba(110,168,255,0.35);
+    box-shadow: 0 0 22px rgba(70,120,255,0.18);
+}
+
+.summaryHero h1 { 
+    margin: 0 0 6px; 
+    font-size: 20px; 
+    letter-spacing: .3px; 
+    color: #e9edff;
+}
+
+.summaryMeta { 
+    font-size: 12px; 
+    color:#9aa3c2; 
+    margin-bottom: 10px; 
+}
+
+.funcBlock {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid #2a2d36;
+    border-radius: 12px;
+    padding: 12px 12px 11px;
+    box-shadow: 0 0 16px rgba(70,120,255,0.10);
+}
+
+.funcBlock + .funcBlock { 
+    margin-top: 10px; 
+}
+
+.funcHead {
+    font-weight: 700;
+    font-size: 15px;
+    color: #e9edff;
+    margin: 0 0 8px;
+    display:flex;
+    gap:8px;
+    align-items:baseline;
+    flex-wrap:wrap;
+}
+
+.funcBadge {
+    font-size: 12px;
+    color:#9aa3c2;
+    font-weight: 600;
+}
+
+.funcBody {
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.65;
+    white-space: normal;
+    word-break: break-word;
+}
 </style>
 </head>
 <body>
@@ -242,6 +305,8 @@ h3 {
 <header>socionics：機能 × 情報要素 </header>
 
 <div class="container">
+
+    <div id="summaryPanel" style="display:none"></div>
 
     <h2>① タイプを選択する</h2>
     <p class="quadra-note">   </p>
@@ -623,24 +688,40 @@ function renderAllFunctions(type){
   const blocks = FUNC_KEYS.map((funcKey, i) => {
     const elem = elements[i];
     const textsOfFunc = TEXTS[funcKey] || {};
-    const body = textsOfFunc[elem] || defaultText(type, funcKey, elem);
+    let body = textsOfFunc[elem] || defaultText(type, funcKey, elem);
+    
+    // 改行が多い問題を解消：改行をスペースに潰して1段落に
+    body = body.replace(/\s*\n+\s*/g, " ").replace(/ {2,}/g, " ").trim();
 
     return `
-      <div class="allBlock" style="margin: 14px 0; padding: 12px; border: 1px solid #2a2d36; border-radius: 10px; background: rgba(255,255,255,0.04);">
-        <div style="font-weight:700; margin-bottom:6px;">
+      <div class="funcBlock">
+        <div class="funcHead">
           ${FUNC_LABEL_JP[funcKey]}（${elem}）
+          <span class="funcBadge">第${i+1}機能</span>
         </div>
-        <div style="white-space:pre-wrap; color:#e9edff; line-height:1.65;">
+        <div class="funcBody">
           ${String(body).replace(/[&<>"]/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[s]))}
         </div>
       </div>
     `;
   }).join("");
 
-  contentTitle.textContent = `${type} の8機能（まとめ）`;
-  contentTag.textContent = `Type: ${type} / expand=1`;
-  contentText.innerHTML = blocks;
-  contentPanel.style.display = "block";
+  const summaryPanel = document.getElementById("summaryPanel");
+  summaryPanel.innerHTML = `
+    <div class="summaryHero">
+      <h1>${type} の8機能（まとめ）</h1>
+      <div class="summaryMeta">Type: ${type} / expand=1</div>
+    </div>
+    ${blocks}
+  `;
+  summaryPanel.style.display = "block";
+
+  // 従来のパネルは隠す（まとめを先に見せるため）
+  functionPanel.style.display = "none";
+  contentPanel.style.display = "none";
+
+  // ページ上部に留める
+  summaryPanel.scrollIntoView({block:"start"});
 }
 
 typeButtons.forEach(btn => {
