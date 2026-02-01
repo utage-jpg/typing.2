@@ -981,7 +981,7 @@ html,body{
 
   {"id":11,"phase":1,"text":"意見が割れたら、納得感より数字や根拠で決めたいです。","axis":"TF","axisDir":"T","element":null,"dimension":"none","weight":1.2},
   {"id":12,"phase":1,"text":"人を評価するとき、人柄より成果・スキルを重視します。","axis":"TF","axisDir":"T","element":null,"dimension":"none","weight":1.2},
-  {"id":13,"phase":1,"text":"注意するとき、言い方より正しさを優先します。","axis":"TF","axisDir":"T","element":null,"dimension":"none","weight":1.2
+  {"id":13,"phase":1,"text":"注意するとき、言い方より正しさを優先します。","axis":"TF","axisDir":"T","element":null,"dimension":"none","weight":1.5},
   {"id":14,"phase":1,"text":"議論中は、その場の雰囲気より話が論理的かが気になります。","axis":"TF","axisDir":"T","element":null,"dimension":"none","weight":1.2},
   {"id":15,"phase":1,"text":"チームでは、関係性より役割と成果を重視します。","axis":"TF","axisDir":"T","element":null,"dimension":"none","weight":1.2},
 
@@ -1062,11 +1062,7 @@ html,body{
   const state = {
     step: 0,
     // Modified: Reorder questions to Phase 2 → Phase 1 → Phase 3
-    asked: [
-      ...QUESTIONS.filter(q => q.phase === 2).map((q,i) => QUESTIONS.indexOf(q)),
-      ...QUESTIONS.filter(q => q.phase === 1).map((q,i) => QUESTIONS.indexOf(q)),
-      ...QUESTIONS.filter(q => q.phase === 3).map((q,i) => QUESTIONS.indexOf(q))
-    ],
+    asked: QUESTIONS.filter(q=>q.phase===2).map(q=>QUESTIONS.indexOf(q)).concat(QUESTIONS.filter(q=>q.phase===1).map(q=>QUESTIONS.indexOf(q))).concat(QUESTIONS.filter(q=>q.phase===3).map(q=>QUESTIONS.indexOf(q))),
     answers: [],
     posterior: Object.fromEntries(TYPES.map(t=>[t,1/TYPES.length])),
     quadra: {Alpha:0.25,Beta:0.25,Gamma:0.25,Delta:0.25},
@@ -1100,7 +1096,7 @@ html,body{
   const sideCard=document.getElementById("sideCard");
   const btnToggleLive=document.getElementById("btnToggleLive");
 
-  function setProgress(){ elProg.textContent = `${state.step} / ${QUESTIONS.length}`; elBarFill.style.width = `${clamp(state.step/QUESTIONS.length,0,1)*100}%`; }
+  function setProgress(){ elProg.textContent = `${state.step} / ${state.asked.length}`; elBarFill.style.width = `${clamp(state.step/state.asked.length,0,1)*100}%`; }
 
   /* --------------------------
      Existing helpers reused: stabilizePosterior, etc.
@@ -1197,7 +1193,7 @@ html,body{
     return normalizeVec(out);
   }
   function getSharpenK(step){
-    const base = 1.0 + 1.5 * (step / (QUESTIONS.length - 1));
+    const base = 1.0 + 1.5 * (step / (state.asked.length - 1));
     return clamp(base, 1.0, 2.5);
   }
   function top1Prob(posterior){
@@ -1496,7 +1492,7 @@ html,body{
   }
 
   function renderQuestion(){
-    if(state.step >= QUESTIONS.length){
+    if(state.step >= state.asked.length){
       showResult();
       return;
     }
