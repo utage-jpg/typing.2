@@ -1549,7 +1549,7 @@ html,body{
         const val = score100[e];
         const isValued = valuedProb[e] >= 0.5;
         const labelVal = isValued ? "価値寄り" : "非価値寄り";
-        const pctText = (val>0?"+":"") + String(val) + "%";
+        const pctText = (val>0?"+":"") + Number(val).toFixed(1) + "%";
         const leftPct = val < 0 ? Math.abs(val) : 0;
         const rightPct = val > 0 ? val : 0;
         return `
