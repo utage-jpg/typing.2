@@ -1522,24 +1522,23 @@ html,body{
     const centered = {};
     for(const e of ELEMENTS) centered[e] = raw[e] - mean;
 
-    // scale to -50..+50 and round to 10-step
+    // scale to -100..+100
     let maxAbs = Math.max(...Object.values(centered).map(Math.abs)) || 1;
-    const score10 = {};
+    const score100 = {};
     for(const e of ELEMENTS){
-      const scaled = (centered[e]/maxAbs) * 50;
-      const step = Math.round(scaled / 10) * 10;
-      score10[e] = clamp(step, -50, 50);
+      const scaled = (centered[e]/maxAbs) * 100;
+      score100[e] = clamp(scaled, -100, 100);
     }
 
     // correct rounding residual so sum==0
-    const ssum = Object.values(score10).reduce((a,b)=>a+b,0);
+    const ssum = Object.values(score100).reduce((a,b)=>a+b,0);
     if(ssum !== 0){
-      const maxElem = Object.entries(score10).reduce((acc,cur)=>{
+      const maxElem = Object.entries(score100).reduce((acc,cur)=>{
         if(!acc) return cur;
         return Math.abs(cur[1]) > Math.abs(acc[1]) ? cur : acc;
       }, null);
       if(maxElem){
-        score10[maxElem[0]] = clamp(score10[maxElem[0]] - ssum, -50, 50);
+        score100[maxElem[0]] = clamp(score100[maxElem[0]] - ssum, -100, 100);
       }
     }
 
@@ -1547,7 +1546,7 @@ html,body{
     const el = document.getElementById("elementViz");
     if(el){
       el.innerHTML = ELEMENTS.map(e=>{
-        const val = score10[e];
+        const val = score100[e];
         const isValued = valuedProb[e] >= 0.5;
         const labelVal = isValued ? "価値寄り" : "非価値寄り";
         const pctText = (val>0?"+":"") + String(val) + "%";
@@ -1560,10 +1559,10 @@ html,body{
               <div class="centerLine" aria-hidden="true"></div>
               <div class="barWrap" style="width:100%;">
                 <div style="flex:1;display:flex;justify-content:flex-end;padding-right:4px">
-                  <div style="width:0%;max-width:50%;" data-w="${leftPct}"><div class="neg" style="width:100%"></div></div>
+                  <div style="width:0%;max-width:100%;" data-w="${leftPct}"><div class="neg" style="width:100%"></div></div>
                 </div>
                 <div style="flex:1;display:flex;justify-content:flex-start;padding-left:4px">
-                  <div style="width:0%;max-width:50%;" data-w="${rightPct}"><div class="pos" style="width:100%"></div></div>
+                  <div style="width:0%;max-width:100%;" data-w="${rightPct}"><div class="pos" style="width:100%"></div></div>
                 </div>
               </div>
             </div>
@@ -1615,7 +1614,7 @@ html,body{
 
     // Return data for image generation
     return {
-      elementScore10: score10,
+      elementScore100: score100,
       quadraPercent: order.reduce((acc, q) => {
         acc[q] = parseFloat((Math.round(clamp(qDisplay[q],0,1)*1000)/10).toFixed(1));
         return acc;
