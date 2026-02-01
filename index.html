@@ -981,7 +981,7 @@ html,body{
 
   {"id":11,"phase":1,"text":"意見が割れたら、納得感より数字や根拠で決めたいです。","axis":"TF","axisDir":"T","element":null,"dimension":"none","weight":1.2},
   {"id":12,"phase":1,"text":"人を評価するとき、人柄より成果・スキルを重視します。","axis":"TF","axisDir":"T","element":null,"dimension":"none","weight":1.2},
-  {"id":13,"phase":1,"text":"注意するとき、言い方より正しさを優先します。","axis":"TF","axisDir":"T","element":null,"dimension":"none","weight":1.5},
+  {"id":13,"phase":1,"text":"注意するとき、言い方より正しさを優先します。","axis":"TF","axisDir":"T","element":null,"dimension":"none","weight":1.2
   {"id":14,"phase":1,"text":"議論中は、その場の雰囲気より話が論理的かが気になります。","axis":"TF","axisDir":"T","element":null,"dimension":"none","weight":1.2},
   {"id":15,"phase":1,"text":"チームでは、関係性より役割と成果を重視します。","axis":"TF","axisDir":"T","element":null,"dimension":"none","weight":1.2},
 
@@ -1061,7 +1061,12 @@ html,body{
      -------------------------- */
   const state = {
     step: 0,
-    asked: QUESTIONS.map((q,i)=>i),
+    // Modified: Reorder questions to Phase 2 → Phase 1 → Phase 3
+    asked: [
+      ...QUESTIONS.filter(q => q.phase === 2).map((q,i) => QUESTIONS.indexOf(q)),
+      ...QUESTIONS.filter(q => q.phase === 1).map((q,i) => QUESTIONS.indexOf(q)),
+      ...QUESTIONS.filter(q => q.phase === 3).map((q,i) => QUESTIONS.indexOf(q))
+    ],
     answers: [],
     posterior: Object.fromEntries(TYPES.map(t=>[t,1/TYPES.length])),
     quadra: {Alpha:0.25,Beta:0.25,Gamma:0.25,Delta:0.25},
@@ -1121,16 +1126,16 @@ html,body{
     return normalizeVec(w);
   }
   function applyAxisSoftElimination(p, step){
-    if(step < 8) return p;
+    if(step < 12) return p;  
     const pE = sumSet(p, DICH.E);
     const pS = sumSet(p, DICH.S);
     const pT = sumSet(p, DICH.T);
     const confE = Math.abs(pE - 0.5) * 2;
     const confS = Math.abs(pS - 0.5) * 2;
     const confT = Math.abs(pT - 0.5) * 2;
-    const phase = step < 18 ? 0.55 : step < 30 ? 0.75 : 1.0;
-    const confStart = 0.55;
-    const strengthMax = 0.55;
+    const phase = step < 25 ? 0.3 : step < 40 ? 0.5 : 0.7;  
+    const confStart = 0.65;  
+    const strengthMax = 0.25;  
     function axisPenalty(conf){
       if(conf <= confStart) return 1.0;
       const x = (conf - confStart) / (1 - confStart);
@@ -1153,7 +1158,9 @@ html,body{
     }
     return normalizeVec(out);
   }
-  function getStabilizeLam(step){ return step < 20 ? 0.30 : step < 40 ? 0.20 : 0.22; }
+  function getStabilizeLam(step){ 
+    return step < 20 ? 0.03 : step < 40 ? 0.04 : 0.05; 
+  }
   function stabilizePosterior(posterior, step){
     const lam = getStabilizeLam(step);
     const w = factorizedFromDich(posterior);
@@ -1227,20 +1234,19 @@ html,body{
     const pT = sigmoid(valT * 0.4);
     const pJ = sigmoid(valJ * 0.35);
 
+    const confE = Math.abs(pE - 0.5) * 2;  
+    const confS = Math.abs(pS - 0.5) * 2;
+    const confT = Math.abs(pT - 0.5) * 2;
+    const confJ = Math.abs(pJ - 0.5) * 2;
+    const avgConf = (confE + confS + confT + confJ) / 4;
+    const confMin = Math.min(confE, confS, confT, confJ);  
+
+    const elemPosterior = {};
     let maxAbsElem = 0;
     for(const e of ELEMENTS) maxAbsElem = Math.max(maxAbsElem, Math.abs(state.elementScores[e]||0));
     const elemScale = maxAbsElem > 0 ? (1 / maxAbsElem) : 1;
 
-    const rawScores = {};
-    const elementScoreNorm = {};
     for(const t of TYPES){
-      let axisMatch = 0;
-      axisMatch += (DICH.E.has(t) ? pE : (1-pE));
-      axisMatch += (DICH.S.has(t) ? pS : (1-pS));
-      axisMatch += (DICH.T.has(t) ? pT : (1-pT));
-      axisMatch += (DICH.J.has(t) ? pJ : (1-pJ));
-      axisMatch = axisMatch / 4;
-
       let dot = 0;
       for(const e in state.elementScores){
         const pos = MODEL[t].indexOf(e);
@@ -1249,13 +1255,48 @@ html,body{
           dot += (state.elementScores[e] || 0) * w;
         }
       }
-      elementScoreNorm[t] = sigmoid(dot * 0.25);
+      elemPosterior[t] = sigmoid(dot * 0.25);
+    }
+    const elemNorm = normalizeVec(elemPosterior);
 
+    const axisPosterior = {};
+    for(const t of TYPES){
+      let axisMatch = 0;
+      axisMatch += (DICH.E.has(t) ? pE : (1-pE));
+      axisMatch += (DICH.S.has(t) ? pS : (1-pS));
+      axisMatch += (DICH.T.has(t) ? pT : (1-pT));
+      axisMatch += (DICH.J.has(t) ? pJ : (1-pJ));
+      axisMatch = axisMatch / 4;
+      axisPosterior[t] = axisMatch;
+    }
+    const axisNorm = normalizeVec(axisPosterior);
 
-      const wAxis = 0.48;
-      const wElem = 0.48;
-      const wPrior = 0.04;
-      const combined = wAxis*axisMatch + wElem*(elementScoreNorm[t] || 0) + wPrior*(1/TYPES.length);
+    const correctedScores = {};
+    for(const t of TYPES){
+      let mismatchCount = 0;
+      if(DICH.E.has(t) && pE < 0.5) mismatchCount++;
+      if(!DICH.E.has(t) && pE >= 0.5) mismatchCount++;
+      if(DICH.S.has(t) && pS < 0.5) mismatchCount++;
+      if(!DICH.S.has(t) && pS >= 0.5) mismatchCount++;
+      if(DICH.T.has(t) && pT < 0.5) mismatchCount++;
+      if(!DICH.T.has(t) && pT >= 0.5) mismatchCount++;
+      if(DICH.J.has(t) && pJ < 0.5) mismatchCount++;
+      if(!DICH.J.has(t) && pJ >= 0.5) mismatchCount++;
+
+      const isExtreme = confMin > 0.75;  
+      const kPenalty = isExtreme ? 0.06 : 0.04;  
+      const penalty = 1 - kPenalty * mismatchCount * avgConf;
+      
+      correctedScores[t] = Math.max(1e-12, elemNorm[t] * penalty);
+    }
+
+    const rawScores = {};
+    const wElem = 0.55;  
+    const wAxis = 0.40;  
+    const wPrior = 0.05; 
+    
+    for(const t of TYPES){
+      const combined = wElem * (correctedScores[t] || 0) + wAxis * (axisNorm[t] || 0) + wPrior * (1/TYPES.length);
       rawScores[t] = Math.max(1e-12, combined);
     }
 
@@ -1263,7 +1304,6 @@ html,body{
     const stabilized = stabilizePosterior(posteriorRaw, stepForStabilize || state.step);
     state.posterior = stabilized;
 
-    // compute quadra from posterior
     const qRaw = computeQuadraFromPosterior(state.posterior);
 
     // compute confidence and optionally mix toward top-type
